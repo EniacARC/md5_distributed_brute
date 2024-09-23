@@ -15,6 +15,7 @@ import select
 import socket
 import threading
 from collections import deque
+from protocol import *
 
 
 class Server:
@@ -24,7 +25,7 @@ class Server:
     work_lock = threading.Lock()
     stop_event = threading.Event()
 
-    def __init__(self, desired_hash):
+    def __init__(self, desired_hash: str) -> None:
         # network vars
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # logic vars
@@ -47,9 +48,10 @@ class Server:
         """
         will get num of cors, allocate work, stop the client if necessary, set stop event if needed
         """
+
         pass
 
-    def accept_quants(self):
+    def accept_quants(self) -> int | None:
         try:
             # open server for clients
             self.server_socket.bind((self.LISTEN_IP, self.LISTEN_PORT))
