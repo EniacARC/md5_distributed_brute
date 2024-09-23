@@ -50,7 +50,7 @@ class Server:
         self.hash = desired_hash
 
         self.chunk = 100  # arbitrary number
-        self.max_num = 999
+        self.max_num = 99999
         # self.quants = {}
         self.work_queue = deque()
 
@@ -79,12 +79,13 @@ class Server:
 
     def allocate_work(self, sock, work_range):
 
-        if work_range is not []:
+        if work_range:
+            print(work_range[0][0])
             work_range = work_range[0][0], work_range[-1][-1]
             work_range_bytes = struct.pack(PACK_SIGN, socket.htonl(work_range[0])) + b'|' + struct.pack(PACK_SIGN,
-                                                                                                            socket.htonl(
-                                                                                                                work_range[
-                                                                                                                    1]))
+                                                                                                        socket.htonl(
+                                                                                                            work_range[
+                                                                                                                1]))
             if send_msg(sock, format_msg(self.ALLOCATE_OP, work_range_bytes)):
                 return True
         else:
@@ -96,26 +97,35 @@ class Server:
         previous_chunk = None
 
         with self.work_lock:
-            if self.work_queue:
-                for _ in range(num_of_cors):
-                    if not self.work_queue:
-                        break  # Stop if the deque is empty
+            if not self.work_queue:
+                print("Work queue is empty.")
+                return popped_arr  # Return an empty list if there's no work
 
-                    current_chunk = self.work_queue.popleft()
+            for _ in range(num_of_cors):
+                if not self.work_queue:
+                    print("No more work to pop.")
+                    break  # Stop if the deque is empty
 
-                    if previous_chunk is not None:
-                        # Check if the end of the previous chunk matches the start of the current chunk
-                        if previous_chunk[1] + 1 != current_chunk[0]:
-                            # Stop if the chunks don't match
-                            self.work_queue.appendleft(current_chunk)  # Put back the chunk that doesn't match
-                            break
+                current_chunk = self.work_queue.popleft()
 
-                    popped_arr.append(current_chunk)
-                    previous_chunk = current_chunk
+                if previous_chunk is not None:
+                    # Check if the end of the previous chunk matches the start of the current chunk
+                    if previous_chunk[1] + 1 != current_chunk[0]:
+                        print(
+                            f"Chunks do not match: previous end {previous_chunk[1]}, current start {current_chunk[0]}")
+                        # Stop if the chunks don't match
+                        self.work_queue.appendleft(current_chunk)  # Put back the chunk that doesn't match
+                        break
+
+                popped_arr.append(current_chunk)
+                previous_chunk = current_chunk
+
+        if not popped_arr:
+            print("No valid chunks were popped.")
+
         return popped_arr
 
     def handle_quant(self, sock):
-        print("hello")
         """
         will get num of cors, allocate work, stop the client if necessary, set stop event if needed
 
@@ -124,7 +134,6 @@ class Server:
         """
 
         popped_items = []
-        found_num = -1
 
         num_of_cors = self.handshake(sock)
         if num_of_cors != 0:
@@ -149,7 +158,6 @@ class Server:
                     waiting, _, _ = select.select([sock], [], [], 1)
                     if waiting:
                         op_code, data = receive_data(sock)
-                        print(op_code)
                         if op_code == self.HEARTBEAT_OP:
                             start_time = current_time
                         elif op_code == self.ALLOCATE_OP:
@@ -158,11 +166,10 @@ class Server:
                                 # active = False
                                 break
                         elif op_code == self.FOUND_OP:
-                            found_num = struct.pack(PACK_SIGN, socket.htonl(data))
+                            self.found_num = socket.htonl(struct.unpack(PACK_SIGN, data)[0])
                             self.stop_event.set()
 
                 sock.close()
-                return found_num
 
     def accept_quants(self) -> int | None:
         try:
@@ -183,8 +190,9 @@ class Server:
 
 
 def main():
-    server = Server(hashlib.md5(str(51).encode()).hexdigest())
+    server = Server(hashlib.md5(str(9145).encode()).hexdigest())
     print(server.accept_quants())
+
 
 if __name__ == '__main__':
     main()

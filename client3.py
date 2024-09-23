@@ -4,8 +4,30 @@ import os
 import multiprocessing as mp
 import threading
 import time
+import struct
 
 from protocol import *
+from utils import check_md5
+
+
+# Helper function outside of the Client class, which can be pickled
+# def check_md5(num, target_hash, running):
+#     """Calculates MD5 and checks if it matches the target hash."""
+#     if running.is_set():
+#         return None  # Stop early if hash is already found
+#
+#     # Calculate the MD5 hash for the number
+#     md5_hash = hashlib.md5(str(num).encode()).hexdigest()
+#
+#     # DEBUG: Print the number and its MD5 hash
+#     print(f"Checking number: {num}, MD5: {md5_hash}")
+#
+#     if md5_hash == target_hash:
+#         print(f"Found match: {num}")  # DEBUG: Output when a match is found
+#         running.set()  # Set the flag to stop other processes
+#         return num  # Return the found number
+#
+#     return None
 
 
 class Client:
@@ -19,7 +41,9 @@ class Client:
     SERVER_PORT = 4587
 
     def __init__(self):
-        self.running = mp.Event()
+        # Use Manager to create an Event that can be shared between processes
+        self.manager = mp.Manager()
+        self.running = self.manager.Event()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.hash = ""
         self.found = None
@@ -28,16 +52,12 @@ class Client:
     def handshake(self):
         try:
             self.sock.connect((self.SERVER_IP, self.SERVER_PORT))
-            # print(struct.pack(PACK_SIGN, socket.htonl(os.cpu_count())))
-            # print(os.cpu_count())
-            # print(socket.htonl(struct.unpack(PACK_SIGN, struct.pack(PACK_SIGN, socket.htonl(os.cpu_count())))[0]))
             if send_msg(self.sock,
                         format_msg(self.HANDSHAKE_OP, struct.pack(PACK_SIGN, socket.htonl(os.cpu_count())))):
                 opcode, data = receive_data(self.sock)
-                print(opcode)
-                print(data)
                 if opcode == self.HANDSHAKE_OP:
-                    self.hash = data.decode()
+                    self.hash = data.decode().strip()  # Strip any extra whitespace
+                    print(f"Target Hash: {self.hash}")  # DEBUG: Output the target hash
                 else:
                     self.running.set()
 
@@ -48,7 +68,6 @@ class Client:
     def send_heartbeat(self):
         try:
             while True:
-                # while not self.running.is_set():
                 msg = format_msg(self.HEARTBEAT_OP, b'')
                 if not send_msg(self.sock, msg):
                     self.running.set()
@@ -57,46 +76,24 @@ class Client:
             print(err)
             self.running.set()
 
-    # def request_work(self):
-    #     start, end = -1, -1
-    #     if send_msg(self.sock, format_msg(self.ALLOCATE_OP, b'')) != -1:
-    #         opcode, data = receive_data(self.sock)
-    #         if opcode == self.ALLOCATE_OP:
-    #             start, end = data.split(b'|')
-    #             start = socket.htonl(struct.unpack(PACK_SIGN, start)[0])
-    #             end = socket.htonl(struct.unpack(PACK_SIGN, end)[0])
-    #         elif opcode == self.NOT_NEEDED_OP:
-    #             self.running.set()
-    #         else:
-    #             self.running.set()
-    #
-    #         return start, end
-
     def request_work(self):
         return send_msg(self.sock, format_msg(self.ALLOCATE_OP, b''))
 
-    def calculate_md5(self, num):
-        if not self.running.is_set():
-            md5_hash = hashlib.md5(str(num).encode()).hexdigest()
-            if md5_hash == self.hash:
-                self.running.set()
-                return md5_hash
-        return None
-
     def work_chunk(self, num_range):
-        num = None
-        with mp.Pool(processes=mp.cpu_count()) as pool:
-            results = [pool.apply_async(self.calculate_md5, n) for n in num_range]
+        """Distributes work across multiple processes."""
+        # Pass the check_md5 function with arguments to the pool
+        with mp.Pool(processes=os.cpu_count()) as pool:
+            result = pool.starmap(
+                check_md5,
+                [(num, self.hash, self.running) for num in num_range]
+            )
 
-            for r in results:
-                if r is not None:
-                    print(f"found: {r}")
-                    num = r
-                    pool.terminate()
-                    break
-
-        self.range = None
-        return num
+            # Check if we found the number with the desired hash
+            for res in result:
+                if res is not None:
+                    print(f"Found: {res}")  # DEBUG: Output when the correct number is found
+                    return res
+        return None
 
     def handle_work(self):
         while not self.running.is_set():
@@ -109,8 +106,11 @@ class Client:
                 print(f"got range: {self.range[0]}-{self.range[1]}")
                 self.found = self.work_chunk(range(self.range[0], self.range[1]))
                 if self.found:
+                    print(self.found)
                     self.running.set()
                     send_msg(self.sock, format_msg(self.FOUND_OP, struct.pack(PACK_SIGN, socket.htonl(self.found))))
+                else:
+                    print(f"No match found in range: {self.range[0]}-{self.range[1]}")  # DEBUG
 
     def start(self):
         self.handshake()
@@ -122,16 +122,13 @@ class Client:
 
         while not self.running.is_set():
             op_code, data = receive_data(self.sock)
-            print(op_code)
             if op_code == self.ALLOCATE_OP:
                 start, end = data.split(b'|')
-                print("got data")
                 start = socket.htonl(struct.unpack(PACK_SIGN, start)[0])
                 end = socket.htonl(struct.unpack(PACK_SIGN, end)[0])
                 self.range = (start, end)
             elif op_code == self.NOT_NEEDED_OP or op_code == self.FOUND_OP:
-                self.running.set()
-            else:
+                print(op_code)
                 self.running.set()
 
 
