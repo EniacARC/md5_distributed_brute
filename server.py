@@ -49,12 +49,12 @@ class Server:
         self.found_num = -1  # the number that made the hash (-1 = not found)
         self.hash = desired_hash
 
-        self.chunk = 10000  # arbitrary number
-        self.max_num = 9999999
+        self.chunk = 1000  # arbitrary number
+        self.max_num = 999999
         # self.quants = {}
         self.work_queue = deque()
 
-        # fill the work queue - mabye generate as a json
+        # fill the work queue
         lst = 1
         while lst <= self.max_num:
             end = min(self.max_num, lst + self.chunk - 1)
@@ -146,7 +146,7 @@ class Server:
                         send_msg(sock, format_msg(self.FOUND_OP, b''))
                         break
                     current_time = time.time()
-                    if current_time - start_time > 10:
+                    if current_time - start_time > 5:
                         if popped_items is not None:
                             with self.work_lock:
                                 for i in popped_items:
@@ -173,7 +173,6 @@ class Server:
 
     def accept_quants(self) -> int | None:
         try:
-            print("Ready to accept clients")
             # open server for clients
             self.server_socket.bind((self.LISTEN_IP, self.LISTEN_PORT))
             self.server_socket.listen(1)
@@ -191,8 +190,7 @@ class Server:
 
 
 def main():
-    server = Server(hashlib.md5(str(7695431).encode()).hexdigest())
-    # server = Server("EC9C0F7EDCC18A98B1F31853B1813301")
+    server = Server(hashlib.md5(str(344456).encode()).hexdigest())
     print(server.accept_quants())
 
 
