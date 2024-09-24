@@ -80,6 +80,7 @@ class Client:
         return send_msg(self.sock, format_msg(self.ALLOCATE_OP, b''))
 
     def work_chunk(self, num_range):
+        print(num_range)
         """Distributes work across multiple processes."""
         # Pass the check_md5 function with arguments to the pool
         with mp.Pool(processes=os.cpu_count()) as pool:

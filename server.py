@@ -49,8 +49,8 @@ class Server:
         self.found_num = -1  # the number that made the hash (-1 = not found)
         self.hash = desired_hash
 
-        self.chunk = 1000  # arbitrary number
-        self.max_num = 999999
+        self.chunk = 100  # arbitrary number
+        self.max_num = 99999
         # self.quants = {}
         self.work_queue = deque()
 
@@ -168,6 +168,13 @@ class Server:
                         elif op_code == self.FOUND_OP:
                             self.found_num = socket.htonl(struct.unpack(PACK_SIGN, data)[0])
                             self.stop_event.set()
+                        else:
+                            print("dine")
+                            if popped_items is not None:
+                                with self.work_lock:
+                                    for i in popped_items:
+                                        self.work_queue.appendleft(i)
+                            break
 
                 sock.close()
 
@@ -190,7 +197,7 @@ class Server:
 
 
 def main():
-    server = Server(hashlib.md5(str(344456).encode()).hexdigest())
+    server = Server(hashlib.md5(str(3000).encode()).hexdigest())
     print(server.accept_quants())
 
 
