@@ -71,7 +71,7 @@ class Client:
                 msg = format_msg(self.HEARTBEAT_OP, b'')
                 if not send_msg(self.sock, msg):
                     self.running.set()
-                time.sleep(2)
+                time.sleep(9)
         except socket.error as err:
             print(err)
             self.running.set()
@@ -83,16 +83,26 @@ class Client:
         """Distributes work across multiple processes."""
         # Pass the check_md5 function with arguments to the pool
         with mp.Pool(processes=os.cpu_count()) as pool:
-            result = pool.starmap(
-                check_md5,
-                [(num, self.hash, self.running) for num in num_range]
-            )
+            result = []
 
-            # Check if we found the number with the desired hash
-            for res in result:
-                if res is not None:
-                    print(f"Found: {res}")  # DEBUG: Output when the correct number is found
-                    return res
+            for num in num_range:
+                # Check if running is set and stop processing if it is
+                if self.running.is_set():
+                    print(f"Stopping processing early for range {num_range[0]}-{num_range[-1]}")
+                    break  # Stop the loop if the running flag is set
+
+                # Use starmap for multiprocessing, processing one batch at a time
+                result = pool.starmap(
+                    check_md5,
+                    [(num, self.hash, self.running)]
+                )
+
+                # Check if we found the number with the desired hash
+                for res in result:
+                    if res is not None:
+                        print(f"Found: {res}")  # DEBUG: Output when the correct number is found
+                        return res
+
         return None
 
     def handle_work(self):
