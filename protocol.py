@@ -17,7 +17,7 @@ def format_msg(op_code: str, data: bytes) -> bytes:
 
 
 def send_msg(sock: socket.socket, data: bytes) -> bool:
-    print(f"sending: {data}")
+    # print(f"sending: {data}")
     was_sent = False
     try:
         sent = 0
@@ -68,3 +68,7 @@ def receive_data(sock: socket.socket) -> (str, bytes):
         print(f"err while recv: {err}")
     finally:
         return op_code, data
+
+
+def decode_int(data):
+    return socket.htonl(struct.unpack(PACK_SIGN, data)[0])
