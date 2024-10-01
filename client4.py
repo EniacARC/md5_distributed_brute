@@ -172,3 +172,15 @@ class Client:
                     self.event.set()
                 else:
                     self.event.set()
+
+
+def main():
+    """
+    Main function to start the client
+    """
+    client = Client()
+    client.start_client()
+
+
+if __name__ == '__main__':
+    main()
