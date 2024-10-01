@@ -21,6 +21,7 @@ ALLOCATE - quant requests work, server gives range
 import hashlib
 import socket
 import threading
+import time
 from collections import deque
 
 import select
@@ -51,7 +52,7 @@ class Server:
         self.hash = desired_hash
 
         # threading work vars
-        self.chunk = 1000000  # arbitrary number
+        self.chunk = 1000  # arbitrary number
         self.max_num = 9999999999
         # self.quants = {}
         self.work_queue = deque()
@@ -83,10 +84,10 @@ class Server:
         if work_range:
             print(work_range[0][0])
             work_range = work_range[0][0], work_range[-1][-1]
-            work_range_bytes = struct.pack(PACK_SIGN, socket.htonl(work_range[0])) + b'|' + struct.pack(PACK_SIGN,
-                                                                                                        socket.htonl(
-                                                                                                            work_range[
-                                                                                                                1]))
+            work_range_bytes = struct.pack(PACK_SIGN, socket.htonl(work_range[0])) + struct.pack(PACK_SIGN,
+                                                                                                 socket.htonl(
+                                                                                                     work_range[
+                                                                                                         1]))
             send_msg(sock, format_msg(self.ALLOCATE_OP, work_range_bytes))
             # valid_allocate = True
         else:
@@ -173,9 +174,12 @@ class Server:
 
 
 def main():
-    server = Server(hashlib.md5(str(14567897).encode()).hexdigest())
+    # server = Server("EC9C0F7EDCC18A98B1F31853B1813301".lower())
+    server = Server(hashlib.md5(str(5000).encode()).hexdigest())
     print(server.start_server())
 
 
 if __name__ == '__main__':
+    start_time = time.time()
     main()
+    print(time.time() - start_time)

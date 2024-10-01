@@ -113,7 +113,9 @@ class Client:
             if waiting:
                 op_code, data = receive_data(self.sock)
                 if op_code == self.ALLOCATE_OP:
-                    start, end = data.split(b'|')
+
+                    start = data[:INT_SIZE]
+                    end = data[INT_SIZE: INT_SIZE*2]
                     start = socket.htonl(struct.unpack(PACK_SIGN, start)[0])
                     end = socket.htonl(struct.unpack(PACK_SIGN, end)[0])
                     self.range = (start, end)
