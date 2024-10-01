@@ -1,32 +1,14 @@
-"""
-server workflow:
-for each client {
-1. wait for client to connect - each client gives his core number.
-2. allocate a chunk(const) * cors
-3. replay with DESIRED_HASH
-4. send chunk to calculate
-}
-
-if client returns number sends stop to all other clients.
-if client wants chunk and there isn't anymore chunks send NOT_NEEDED
-
-
-msg types:
-HANDSHAKE - server sends hash quant sends num of cors = HS
-NOT NEEDED - no need for more quants
-HEARTBEAT - client is alive
-ALLOCATE - quant requests work, server gives range
-
-"""
 import hashlib
 import socket
 import threading
 import time
 from collections import deque
-
 import select
-
+import logging
 from protocol import *
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class Server:
@@ -36,11 +18,16 @@ class Server:
     HANDSHAKE_OP = "HS"
     NOT_NEEDED_OP = "ND"
     ALLOCATE_OP = "AL"
-    # HEARTBEAT_OP = "HB"
     FOUND_OP = "FN"
     PACK_SIGN = ">I"
 
     def __init__(self, desired_hash):
+        """
+        Initializes the Server instance.
+
+        :param desired_hash: The hash value to be found by clients.
+        :type desired_hash: str
+        """
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # variables for multithreading
@@ -54,7 +41,6 @@ class Server:
         # threading work vars
         self.chunk = 1000  # arbitrary number
         self.max_num = 9999999999
-        # self.quants = {}
         self.work_queue = deque()
 
         # fill the work queue
@@ -65,49 +51,67 @@ class Server:
             lst = end + 1
 
     def __handshake(self, sock):
+        """
+        Handles the handshake process with a client.
+
+        :param sock: The socket for the client connection.
+        :type sock: socket.socket
+        :return: The number of CPU cores provided by the client.
+        :rtype: int
+        """
         num_of_cors = 0
         op_code, data = receive_data(sock)
         if op_code == self.HANDSHAKE_OP:
             with self.work_lock:
                 if self.work_queue:
                     num_of_cors = decode_int(data)
-                    print(f"num of cors = {num_of_cors}")
+                    logging.info(f"Number of CPU cores: {num_of_cors}")
                     if num_of_cors <= 0:
-                        print("incorrect core count")
+                        logging.warning("Incorrect core count provided by the client.")
                         num_of_cors = 0
                 else:
                     send_msg(sock, format_msg(self.NOT_NEEDED_OP, b''))
         return num_of_cors
 
     def __allocate_work(self, sock, work_range):
-        # valid_allocate = False
+        """
+        Allocates a work range to the client.
+
+        :param sock: The socket for the client connection.
+        :type sock: socket.socket
+        :param work_range: The range of numbers allocated to the client.
+        :type work_range: tuple
+        """
         if work_range:
-            print(work_range[0][0])
             work_range = work_range[0][0], work_range[-1][-1]
-            work_range_bytes = struct.pack(PACK_SIGN, socket.htonl(work_range[0])) + struct.pack(PACK_SIGN,
-                                                                                                 socket.htonl(
-                                                                                                     work_range[
-                                                                                                         1]))
+            work_range_bytes = struct.pack(self.PACK_SIGN, socket.htonl(work_range[0])) + struct.pack(
+                self.PACK_SIGN, socket.htonl(work_range[1]))
             send_msg(sock, format_msg(self.ALLOCATE_OP, work_range_bytes))
-            # valid_allocate = True
+            logging.info(f"Allocated work range: {work_range[0]} - {work_range[1]}")
         else:
             send_msg(sock, format_msg(self.NOT_NEEDED_OP, b''))
 
-        # return valid_allocate
-
     def __get_popped(self, num_of_cors):
+        """
+        Pops a specified number of work chunks from the work queue.
+
+        :param num_of_cors: The number of CPU cores requesting work.
+        :type num_of_cors: int
+        :return: A list of work chunks allocated to the client.
+        :rtype: list
+        """
         popped_arr = []
         previous_chunk = None
 
         with self.work_lock:
             if not self.work_queue:
-                print("Work queue is empty.")
+                logging.warning("Work queue is empty.")
                 self.stop_event.set()
                 return popped_arr  # Return an empty list if there's no work
 
             for _ in range(num_of_cors):
                 if not self.work_queue:
-                    print("No more work to pop.")
+                    logging.info("No more work to pop.")
                     break  # Stop if the deque is empty
 
                 current_chunk = self.work_queue.popleft()
@@ -115,7 +119,7 @@ class Server:
                 if previous_chunk is not None:
                     # Check if the end of the previous chunk matches the start of the current chunk
                     if previous_chunk[1] + 1 != current_chunk[0]:
-                        print(
+                        logging.error(
                             f"Chunks do not match: previous end {previous_chunk[1]}, current start {current_chunk[0]}")
                         # Stop if the chunks don't match
                         self.work_queue.appendleft(current_chunk)  # Put back the chunk that doesn't match
@@ -127,6 +131,12 @@ class Server:
         return popped_arr
 
     def handle_quant(self, sock):
+        """
+        Handles the connection with a client (quant) and processes requests.
+
+        :param sock: The socket for the client connection.
+        :type sock: socket.socket
+        """
         work_ranges = []
         num_of_cors = self.__handshake(sock)
         if num_of_cors > 0:
@@ -137,16 +147,15 @@ class Server:
                         op_code, data = receive_data(sock)
                         if op_code == self.FOUND_OP:
                             self.found_num = decode_int(data)
+                            logging.info(f"Found number: {self.found_num}. Stopping server.")
                             self.stop_event.set()
                         elif op_code == self.ALLOCATE_OP:
                             work_ranges = self.__get_popped(num_of_cors)
                             self.__allocate_work(sock, work_ranges)
                         else:
-                            # client disconnected - error
+                            logging.error("Client disconnected or sent an unknown operation.")
                             if work_ranges is not None:
-                                print(work_ranges)
-                                # the order is smallest to biggest.
-                                # we need to insert biggest to smallest
+                                logging.info(f"Returning work ranges to queue: {work_ranges}")
                                 work_ranges.reverse()
                                 with self.work_lock:
                                     for i in work_ranges:
@@ -156,26 +165,35 @@ class Server:
         sock.close()
 
     def start_server(self):
+        """
+        Starts the server and listens for incoming client connections.
+
+        :return: The number found by a client or None if an error occurs.
+        :rtype: int or None
+        """
         try:
             # open server for clients
             self.server_socket.bind((self.LISTEN_IP, self.LISTEN_PORT))
             self.server_socket.listen(1)
+            logging.info("Server started. Waiting for clients...")
             while not self.stop_event.is_set():
                 waiting, _, _ = select.select([self.server_socket], [], [], 1)
                 if waiting:
                     quant_socket, quant_addr = self.server_socket.accept()
-                    print(f"got quant at addr: {quant_addr}")
+                    logging.info(f"Client connected from address: {quant_addr}")
                     quant_thread = threading.Thread(target=self.handle_quant, args=(quant_socket,))
                     quant_thread.start()
-            return self.found_num
         except socket.error as err:
-            print(err)
-            return None
+            logging.error(f"Socket error: {err}")
+        finally:
+            return self.found_num
 
 
 def main():
-    # server = Server("EC9C0F7EDCC18A98B1F31853B1813301".lower())
-    server = Server(hashlib.md5(str(5000).encode()).hexdigest())
+    """
+    Main function to start the server and measure the execution time.
+    """
+    server = Server(hashlib.md5(str(500000).encode()).hexdigest())
     print(server.start_server())
 
 
@@ -183,3 +201,22 @@ if __name__ == '__main__':
     start_time = time.time()
     main()
     print(time.time() - start_time)
+
+"""
+Server Workflow:
+For each client {
+1. Wait for client to connect - each client gives its core number.
+2. Allocate a chunk (const) * cores.
+3. Reply with DESIRED_HASH.
+4. Send chunk to calculate.
+}
+
+If a client returns a number, send stop to all other clients.
+If a client wants a chunk and there aren't any more chunks, send NOT_NEEDED.
+
+Message Types:
+HANDSHAKE - server sends hash; quant sends num of cores = HS.
+NOT NEEDED - no need for more quants.
+HEARTBEAT - client is alive.
+ALLOCATE - quant requests work; server gives range.
+"""
