@@ -183,4 +183,23 @@ def main():
 
 
 if __name__ == '__main__':
+    # Test case where the number should match the hash
+    target_hash = hashlib.md5(str(123456).encode()).hexdigest()
+    assert Client.calculate_md5(123456, target_hash, multiprocessing.Event()) == 123456, "MD5 match failed"
+    # Test case where the number should not match the hash
+    target_hash = hashlib.md5(str(654321).encode()).hexdigest()
+    assert Client.calculate_md5(123456, target_hash, multiprocessing.Event()) is None, "MD5 non-match failed"
+
+    client = Client()
+    # Set the target hash to match 500000
+    client.hash = hashlib.md5(str(500000).encode()).hexdigest()
+    # Create an event to signal when the number is found
+    client.event = multiprocessing.Manager().Event()
+    # Test a range where 500000 should be found
+    found = client.work_chunk(range(499000, 500100))
+    assert found == 500000, "work_chunk failed to find the correct number"
+    # Test a range where the number is not present
+    found = client.work_chunk(range(400000, 410000))
+    assert found is None, "work_chunk found a number when it shouldn't have"
+
     main()

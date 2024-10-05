@@ -91,7 +91,7 @@ class Server:
         else:
             send_msg(sock, format_msg(self.NOT_NEEDED_OP, b''))
 
-    def __get_popped(self, num_of_cors):
+    def get_popped(self, num_of_cors):
         """
         Pops a specified number of work chunks from the work queue.
 
@@ -198,6 +198,27 @@ def main():
 
 
 if __name__ == '__main__':
+    """ assert server functionality """
+    desired_hash = hashlib.md5(str(500000).encode()).hexdigest()
+    server_test = Server(desired_hash)
+
+    expected_num_chunks = (server_test.max_num + server_test.chunk - 1) // server_test.chunk
+    actual_num_chunks = len(server_test.work_queue)
+    assert actual_num_chunks == expected_num_chunks
+
+    num_of_cors_test = 5
+    popped = server_test.get_popped(num_of_cors_test)
+    assert len(popped) == 5
+    for i, chunk in enumerate(popped):
+        expected_start = 1 + i * server_test.chunk
+        expected_end = min(server_test.max_num, (i + 1) * server_test.chunk)
+        assert chunk == (expected_start, expected_end)
+
+    # Ensure the work queue has been updated
+    remaining = len(server_test.work_queue)
+    expected_remaining = ((server_test.max_num + server_test.chunk - 1) // server_test.chunk) - 5
+    assert remaining == expected_remaining
+
     start_time = time.time()
     main()
     print(time.time() - start_time)
