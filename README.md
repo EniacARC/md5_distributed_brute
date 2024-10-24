@@ -30,13 +30,6 @@ The project is built on a client-server model, where:
 
 ---
 
-### **Network Protocol:**
-
-- **TCP Communication**: Handles task assignment, progress updates, and result reporting between server and clients.
-- **UDP Communication**: May be used for periodic updates or broadcasting non-critical messages between nodes.
-
----
-
 ## **Sequence Diagram + Protocol:**
 
 ### **Sequence Diagram:**
