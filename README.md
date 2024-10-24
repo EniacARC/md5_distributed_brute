@@ -50,12 +50,5 @@ The project is built on a client-server model, where:
       - `DATA`: Any associated data with the operation (e.g., start/end of keyspace, result string).
 ---
 
-## **Installation and Usage**
-*To use the MD5 Distributed Brute-Force tool, follow these steps:*
-
-1. Clone the repository:  
-   ```bash
-   git clone https://github.com/EniacARC/md5_distributed_brute.git
-
 ## **Credits**
 This project was created by Yonathan Chapal.
